@@ -11,7 +11,7 @@ Needs both Mirror and Steamworks.NET installed and working in Unity
 
 Quick example how to start a host:
 
-Transport.layer = new SteamNetNetworkTransport();
+Transport.layer = new SteamworksNetworkTransport();
 NetworkManager.singleton.StartHost();
 
 
