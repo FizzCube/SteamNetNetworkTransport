@@ -17,8 +17,6 @@ NetworkManager.singleton.StartHost();
 
 Quick example how to connect to a host as a client:
 
-Transport.layer = new SteamNetNetworkTransport();
-
+Transport.layer = new SteamworksNetworkTransport();
 NetworkManager.singleton.networkAddress = "11111111111111111"; //Where this number is the 64bit Steam ID of the user you are connecting to
-
 NetworkManager.singleton.StartClient();
