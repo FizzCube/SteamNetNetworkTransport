@@ -106,15 +106,15 @@ namespace Mirror
         private Mode mode = Mode.UNDEFINED;
 
         //steam client we are connected to in client mode
-        private SteamClient steamClientServer = null;
-        private int nextConnectionID = 1;
+        private SteamClient steamClientServer;
+        private int nextConnectionID;
 
-        private SteamConnectionMap steamConnectionMap = new SteamConnectionMap();
+        private SteamConnectionMap steamConnectionMap;
 
-        private Queue<int> steamNewConnections = new Queue<int>();
-        private Queue<SteamClient> steamDisconnectedConnections = new Queue<SteamClient>();
+        private Queue<int> steamNewConnections;
+        private Queue<SteamClient> steamDisconnectedConnections;
 
-        private byte[] serverReceiveBuffer = new byte[1048576]; //ToDo: Quick fix, should reference MaxPacketSize
+        private byte[] serverReceiveBuffer;
         private int maxConnections = 0;
 
         //These 2 variables are used in Receive if we receive a new connection And a data packet at the same time. The data is queued to be rerurned next time
@@ -146,6 +146,23 @@ namespace Mirror
 
         //*********************************** shared stuff
 
+
+        void initialise()
+        {
+            nextConnectionID = 1;
+
+            steamConnectionMap = new SteamConnectionMap();
+
+            steamNewConnections = new Queue<int>();
+            steamDisconnectedConnections = new Queue<SteamClient>();
+
+            serverReceiveBuffer = new byte[GetMaxPacketSize()];
+
+            serverReceiveBufferPendingConnectionID = -1;
+            serverReceiveBufferPending = null;
+
+            setupSteamCallbacks();
+        }
 
         /**
             * Send data to peer.
@@ -565,14 +582,10 @@ namespace Mirror
                     callback_OnNewConnection = Callback<P2PSessionRequest_t>.Create(OnNewConnection);
                     Callback<P2PSessionConnectFail_t>.Create(OnConnectFail);
                 }
-                else
-                {
-                    Debug.LogError("Already listening for steam connections");
-                }
             }
             else
             {
-                Debug.LogError("STEAM NOT Initialized");
+                Debug.LogError("STEAM NOT Initialized so couldnt integrate with P2P");
                 return;
             }
 
@@ -667,7 +680,7 @@ namespace Mirror
                 return;
             }
 
-            setupSteamCallbacks();
+            initialise();
 
             CSteamID steamID;
 
@@ -712,6 +725,8 @@ namespace Mirror
             {
                 internalDisconnect(steamClientServer);
             }
+
+            mode = Mode.UNDEFINED;
         }
 
         public bool ClientGetNextMessage(out TransportEvent transportEvent, out byte[] data)
@@ -803,7 +818,7 @@ namespace Mirror
 
             this.maxConnections = maxConnections;
             mode = Mode.SERVER;
-            setupSteamCallbacks();
+            initialise();
 
         }
 
@@ -867,6 +882,13 @@ namespace Mirror
 
         public bool ServerDisconnect(int connectionId)
         {
+            if (LogFilter.Debug) { Debug.Log("ServerDisconnect SteamworksNetworkTransport on ID " + connectionId); }
+
+            if (connectionId == 0)
+            {
+                //this is the ID used for internal connections - ignore this
+                return true;
+            }
             if (!ServerActive())
             {
                 return false;
@@ -874,7 +896,7 @@ namespace Mirror
 
             try
             {
-                if (LogFilter.Debug) { Debug.Log("Attempting to disconnect SteamID:"+connectionId); }
+                if (LogFilter.Debug) { Debug.Log("Attempting to disconnect SteamID:" + connectionId); }
 
                 SteamClient steamClient = steamConnectionMap.fromConnectionID[connectionId];
 
@@ -897,6 +919,8 @@ namespace Mirror
 
         public void ServerStop()
         {
+            if (LogFilter.Debug) { Debug.Log("Stop SteamworksNetworkTransport"); }
+
             foreach (var connection in steamConnectionMap)
             {
                 SteamClient steamClient = connection.Value;
