@@ -114,7 +114,7 @@ namespace Mirror
         private Queue<int> steamNewConnections = new Queue<int>();
         private Queue<SteamClient> steamDisconnectedConnections = new Queue<SteamClient>();
 
-        private byte[] serverReceiveBuffer = new byte[Transport.MaxPacketSize];
+        private byte[] serverReceiveBuffer = new byte[1048576]; //ToDo: Quick fix, should reference MaxPacketSize
         private int maxConnections = 0;
 
         //These 2 variables are used in Receive if we receive a new connection And a data packet at the same time. The data is queued to be rerurned next time
@@ -138,6 +138,12 @@ namespace Mirror
         }
 
 
+        public int GetMaxPacketSize()
+        {
+            return (int)1048576; //"Reliable message send. Can send up to 1MB of data in a single message."
+        }
+
+
         //*********************************** shared stuff
 
 
@@ -151,7 +157,7 @@ namespace Mirror
             {
                 throw new NullReferenceException("send buffer is not initialized");
             }
-            if(sendType >= sendMethods.Length)
+            if (sendType >= sendMethods.Length)
             {
                 Debug.LogError("Trying to use an unknown method to send data");
                 return false;
@@ -159,7 +165,7 @@ namespace Mirror
 
             if (steamclient.state != SteamClient.ConnectionState.CONNECTED)
             {
-                Debug.LogError("Trying to send data on client thats not connected. Current State: "+ steamclient.state);
+                Debug.LogError("Trying to send data on client thats not connected. Current State: " + steamclient.state);
                 return false;
             }
 
@@ -189,7 +195,8 @@ namespace Mirror
 
                 connectionId = steamNewConnections.Dequeue();
 
-                try { 
+                try
+                {
                     SteamClient steamClient = steamConnectionMap.fromConnectionID[connectionId];
 
                     if (steamClient.state == SteamClient.ConnectionState.CONNECTING)
@@ -259,7 +266,7 @@ namespace Mirror
             if (SteamNetworking.IsP2PPacketAvailable(out packetSize, chan))
             {
                 //check we have enough room for this packet
-                if (packetSize > Transport.MaxPacketSize)
+                if (packetSize > Transport.layer.GetMaxPacketSize())
                 {
                     //cant read .. too big! should error here
                     Debug.LogError("Available message is too large");
@@ -369,7 +376,7 @@ namespace Mirror
             if (SteamNetworking.IsP2PPacketAvailable(out packetSize, (int)SteamChannels.SEND_INTERNAL))
             {
                 //check we have enough room for this packet
-                if (packetSize > Transport.MaxPacketSize)
+                if (packetSize > Transport.layer.GetMaxPacketSize())
                 {
                     //cant read .. too big! should error here
                     Debug.LogError("Available message is too large");
@@ -430,13 +437,13 @@ namespace Mirror
                 try
                 {
                     SteamClient steamClient = steamConnectionMap.fromConnectionID[connectionId];
-                    
+
                     if (steamClient.state == SteamClient.ConnectionState.CONNECTED)
                     {
                         float senderTime;
 
                         NetworkReader reader = new NetworkReader(data);
-                        switch(reader.ReadByte())
+                        switch (reader.ReadByte())
                         {
                             case (byte)InternalMessages.PING:
                                 //ping .. send a pong
@@ -527,7 +534,7 @@ namespace Mirror
 
         private void sendInternalPing(SteamClient steamClient)
         {
-            if (true) { Debug.Log("Send Ping to connection " + steamClient.connectionID); }
+            if (LogFilter.Debug) { Debug.Log("Send Ping to connection " + steamClient.connectionID); }
 
             steamClient.lastPing = Time.time;
 
@@ -603,7 +610,7 @@ namespace Mirror
 
         }
 
-        private void HandleNewConnection( CSteamID steamID )
+        private void HandleNewConnection(CSteamID steamID)
         {
             //check if we have a connection already stored for this steam account
             try
@@ -615,6 +622,9 @@ namespace Mirror
                     SteamNetworking.AcceptP2PSessionWithUser(steamID);
                     return;
                 }
+
+                //currently in disconnecting state. Dont accept another connection
+                return;
             }
             catch (KeyNotFoundException)
             {
@@ -715,7 +725,7 @@ namespace Mirror
                 return false;
             }
 
-            if(steamClientServer.state == SteamClient.ConnectionState.DISCONNECTING )
+            if (steamClientServer.state == SteamClient.ConnectionState.DISCONNECTING)
             {
                 if (LogFilter.Debug) { Debug.Log("We are currently trying to disconnect - so, disconnect"); }
                 transportEvent = TransportEvent.Disconnected;
@@ -852,7 +862,7 @@ namespace Mirror
 
                 return false;
             }
-            
+
         }
 
         public bool ServerDisconnect(int connectionId)
@@ -864,11 +874,14 @@ namespace Mirror
 
             try
             {
+                if (LogFilter.Debug) { Debug.Log("Attempting to disconnect SteamID:"+connectionId); }
+
                 SteamClient steamClient = steamConnectionMap.fromConnectionID[connectionId];
 
                 if (steamClient.state == SteamClient.ConnectionState.CONNECTED || steamClient.state == SteamClient.ConnectionState.CONNECTING)
                 {
                     internalDisconnect(steamClient);
+                    if (LogFilter.Debug) { Debug.Log("Server Disconnected"); }
                     return true;
                 }
 
@@ -888,12 +901,12 @@ namespace Mirror
             {
                 SteamClient steamClient = connection.Value;
                 internalDisconnect(steamClient);
-                
+
             }
 
             mode = Mode.UNDEFINED;
         }
-        
+
         public void Shutdown()
         {
             if (LogFilter.Debug) { Debug.Log("Shutdown SteamworksNetworkTransport"); }
@@ -901,7 +914,8 @@ namespace Mirror
             if (mode == Mode.SERVER)
             {
                 ServerStop();
-            } else if (mode == Mode.CLIENT)
+            }
+            else if (mode == Mode.CLIENT)
             {
                 ClientDisconnect();
             }
