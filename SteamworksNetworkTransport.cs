@@ -19,14 +19,14 @@ namespace Mirror
         public CSteamID steamID;
         public ConnectionState state;
         public int connectionID;
-        public float lastRecv = 0;
+        public float timeIdle = 0;
 
         public SteamClient(ConnectionState state, CSteamID steamID, int connectionID)
         {
             this.state = state;
             this.steamID = steamID;
             this.connectionID = connectionID;
-            this.lastRecv = Time.time;
+            this.timeIdle = 0;
         }
     }
 
@@ -96,7 +96,7 @@ namespace Mirror
         }
 
         //The amount of seconds After NetworkTime.PingFrequency before we deam a connection as timed out. We should receive messages at least as oftern as NetworkTime.PingFrequency! Default up to 1 second late
-        public static float connectionTimeoutBuffer = 5.0f;
+        public static float connectedTimeoutBuffer = 5.0f;
 
         private float clientConnectStarted;
         //how long to wait before connect timeout
@@ -207,7 +207,7 @@ namespace Mirror
                 {
                     SteamClient steamClient = steamConnectionMap.fromConnectionID[connectionId];
 
-                    steamClient.lastRecv = Time.time;
+                    steamClient.timeIdle = 0;
 
                     if (steamClient.state == SteamClient.ConnectionState.CONNECTING)
                     {
@@ -294,7 +294,7 @@ namespace Mirror
                         steamClient = steamConnectionMap.fromSteamID[clientSteamID];
 
                         //log when we last received a message for timeout purposes
-                        steamClient.lastRecv = Time.time;
+                        steamClient.timeIdle = 0;
 
                         if (steamClient.state == SteamClient.ConnectionState.CONNECTING)
                         {
@@ -489,13 +489,22 @@ namespace Mirror
 
                 if (steamClient.state == SteamClient.ConnectionState.CONNECTED)
                 {
-                    if ((Time.time - steamClient.lastRecv) > (NetworkTime.PingFrequency + connectionTimeoutBuffer))
+                    if (steamClient.timeIdle > (NetworkTime.PingFrequency + connectedTimeoutBuffer))
                     {
                         //idle too long - disconnect
                         Debug.LogWarning("Connection " + steamClient.connectionID + " timed out - going to disconnect");
                         internalDisconnect(steamClient);
                         continue;
                     }
+
+                    //If client then this will Not be called if the scene is loading. We dont want to count idle time if loading the scene for this reason
+                    //If Server then this will be called so we need to not count idle time for clients who are not "ready" as they are loading the scene and unable to communicate. The connect timeout will catch people that disconnect during scene load
+                    if (mode == Mode.CLIENT || (mode == Mode.SERVER && (!NetworkServer.connections.ContainsKey(steamClient.connectionID) || NetworkServer.connections[steamClient.connectionID].isReady)))
+                    {
+                        steamClient.timeIdle += Time.deltaTime;
+                        Debug.Log(steamClient.timeIdle);
+                    }
+
                 }
             }
 
@@ -550,13 +559,24 @@ namespace Mirror
 
         }
 
+        //note: can be called on the server too probably on its first message to the client. In any case, just try to disconnect
         private void OnConnectFail(P2PSessionConnectFail_t result)
         {
-            if (true) { Debug.LogWarning("Connection failed or closed Steam ID " + result.m_steamIDRemote); }
+            Debug.LogWarning("Connection failed or closed Steam ID: " + result.m_steamIDRemote + " / eP2PSessionError : " + result.m_eP2PSessionError);
 
             if (mode == Mode.CLIENT)
             {
                 ClientDisconnect();
+            }
+            else if (mode == Mode.SERVER)
+            {
+                try
+                {
+                    ServerDisconnect(steamConnectionMap.fromSteamID[result.m_steamIDRemote].connectionID);
+                }
+                catch (KeyNotFoundException)
+                {
+                }
             }
         }
 
