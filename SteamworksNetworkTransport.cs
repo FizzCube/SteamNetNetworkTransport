@@ -135,9 +135,21 @@ namespace Mirror
         private int lastInternalMessageFrame = 0;
 
 
-        public int GetMaxPacketSize()
+        public int GetMaxPacketSize(int channelId = Channels.DefaultReliable)
         {
-            return (int)1048576; //"Reliable message send. Can send up to 1MB of data in a single message."
+            switch (channelId)
+            {
+                case Channels.DefaultUnreliable:
+                    return 1200; //UDP like - MTU size.
+
+                case Channels.DefaultReliable:
+                    return 1048576; //Reliable message send. Can send up to 1MB of data in a single message.
+
+                default:
+                    Debug.LogError("Unknown channel so uknown max size");
+                    return 0;
+            }
+
         }
 
 
@@ -282,7 +294,7 @@ namespace Mirror
             if (SteamNetworking.IsP2PPacketAvailable(out packetSize, chan))
             {
                 //check we have enough room for this packet
-                if (packetSize > Transport.layer.GetMaxPacketSize())
+                if (packetSize > GetMaxPacketSize())
                 {
                     //cant read .. too big! should error here
                     Debug.LogError("Available message is too large");
@@ -373,7 +385,7 @@ namespace Mirror
             if (SteamNetworking.IsP2PPacketAvailable(out packetSize, (int)SteamChannels.SEND_INTERNAL))
             {
                 //check we have enough room for this packet
-                if (packetSize > Transport.layer.GetMaxPacketSize())
+                if (packetSize > GetMaxPacketSize())
                 {
                     //cant read .. too big! should error here
                     Debug.LogError("Available message is too large");
