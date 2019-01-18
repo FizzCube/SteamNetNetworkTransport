@@ -43,7 +43,9 @@ SteamNetworkManager.singleton.StartHost();
 Or, to connect to a host as a client:
 
 ```csharp
-SteamNetworkManager.singleton.networkAddress = friendSteamIDs;
+CSteamID hostSteamID;
+...
+SteamNetworkManager.singleton.networkAddress = hostSteamID.ToString();
 SteamNetworkManager.singleton.StartClient();
 ```
-Where friendSteamIDs is a string containing the hosts Steam account numeric ID.
+Where hostSteamID is a CSteamID containing the hosts Steam account 64 ID. This is usually got by one of the steam systems like friends or lobbies.
